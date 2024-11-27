@@ -117,3 +117,14 @@ plt.ylabel("Member ID")
 plt.title("Login, Activity, and Fixed Activity Events Over Time")
 plt.legend(title="Event Type")
 plt.show()
+
+def run_simulation(duration, num_members):
+    # 시뮬레이션 로직 예제
+    simulated_data = []
+    for i in range(num_members):
+        simulated_data.append({
+            "member_id": i + 1,
+            "activity_score": duration * (i + 1)  # 단순 예제 로직
+        })
+
+    return simulated_data

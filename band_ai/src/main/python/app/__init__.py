@@ -1,11 +1,14 @@
-from flask import Flask, Blueprint, jsonify, request
-from app.models.user import User
-from app import db
-from app.routes.budget_routes import bp as budget_bp
+from flask import Flask, jsonify
+from flask_sqlalchemy import SQLAlchemy
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 
-# TensorFlow 모델 초기화
+import logging
+
+# Database initialization
+db = SQLAlchemy()
+
+# TensorFlow model initialization
 def init_model():
     model = Sequential([
         Dense(16, activation='relu', input_shape=(2,)),
@@ -17,45 +20,50 @@ def init_model():
 
 model = init_model()
 
-bp = Blueprint('main', __name__)
+# Seed data for initial database population
+def seed_data():
+    """Insert initial data into the database."""
 
-@bp.route('/')
-def home():
-    return jsonify({"message": "Welcome to Band AI!"})
+    # Add activities
+    activity1 = Activity(name="Activity A", description="Description A", status="opened", participant_num=10)
+    activity2 = Activity(name="Activity B", description="Description B", status="closed", participant_num=5)
 
-@bp.route('/simulate', methods=['POST'])
-def simulate():
-    params = request.json
-    return jsonify({"status": "simulation started", "params": params})
+    db.session.add_all([activity1, activity2])
 
-@bp.route('/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-    user_list = [{"id": user.id, "name": user.name, "email": user.email} for user in users]
-    return jsonify(user_list)
+    # Add participants
+    participant1 = Participant(activity_id=1, member_id=1, username="user1", member_name="User One", status="attend")
+    participant2 = Participant(activity_id=1, member_id=2, username="user2", member_name="User Two", status="not_attend")
+    db.session.add_all([participant1, participant2])
 
-@bp.route('/users', methods=['POST'])
-def create_user():
-    data = request.json
-    new_user = User(name=data['name'], email=data['email'])
-    db.session.add(new_user)
     db.session.commit()
-    return jsonify({"message": "User created", "user": {"id": new_user.id, "name": new_user.name}})
+
+# Flask application factory
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object('config.Config')
+    app.config.from_object('config')  # Config 적용
+    db.init_app(app)
 
-    # 라우트 등록
-    app.register_blueprint(budget_bp, url_prefix='/api/budget')
+    # Database initialization and seeding
+    with app.app_context():
+        db.create_all()
+        seed_data()
 
-    # 예산 부족 예측 라우트 추가
-    @app.route('/predict_budget', methods=['POST'])
-    def predict_budget():
-        data = request.get_json()
-        current_usage = data.get('current_usage', 0)
-        target_budget = data.get('target_budget', 0)
-        predictions = model.predict([[current_usage, target_budget]])
-        return jsonify({"shortage_probability": float(predictions[0])})
+    logging.basicConfig(level=logging.INFO)
+
+    # Register Blueprints
+    from app.routes.main_routes import bp as main_bp
+    app.register_blueprint(main_bp, url_prefix='/api')
+
+    # Error handlers
+    @app.errorhandler(400)
+    def handle_bad_request(e):
+        return jsonify({"error": "Bad request"}), 400
+
+    @app.errorhandler(500)
+    def handle_internal_error(e):
+        logging.error(f"Server Error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
     return app
+    print("Flask app created successfully!")
